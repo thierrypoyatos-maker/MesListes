@@ -606,16 +606,24 @@ function extraitCitation(citation, nbMots) {
 }
 
 // Interroge Wikiquote ; renvoie au plus 3 pages : [{ titre, url }]
+// Les pages de personnes (catégories « Naissance en… », « Décès en… ») passent
+// en priorité : si on en trouve, on écarte les pages de thèmes (« Amour »…) et d'œuvres.
 async function chercherSurWikiquote(langue, requete) {
-  const adresse = `https://${langue}.wikiquote.org/w/api.php?action=query&list=search&format=json&origin=*` +
-    `&srnamespace=0&srlimit=3&srprop=&srsearch=${encodeURIComponent(requete)}`;
+  const adresse = `https://${langue}.wikiquote.org/w/api.php?action=query&format=json&origin=*` +
+    `&generator=search&gsrnamespace=0&gsrlimit=6&gsrsearch=${encodeURIComponent(requete)}` +
+    `&prop=categories&cllimit=max&clshow=!hidden`;
   const reponse = await fetch(adresse);
   if (!reponse.ok) return [];
   const resultat = await reponse.json();
-  return (resultat.query?.search || []).map(r => ({
-    titre: r.title,
-    url: `https://${langue}.wikiquote.org/wiki/${encodeURIComponent(r.title.replace(/ /g, "_"))}`,
-  }));
+  const pages = Object.values(resultat.query?.pages || {})
+    .sort((a, b) => a.index - b.index)
+    .map(p => ({
+      titre: p.title,
+      url: `https://${langue}.wikiquote.org/wiki/${encodeURIComponent(p.title.replace(/ /g, "_"))}`,
+      personne: (p.categories || []).some(c => /naissance en|décès en|births|deaths|personnalit|people/i.test(c.title)),
+    }));
+  const personnes = pages.filter(p => p.personne);
+  return (personnes.length ? personnes : pages).slice(0, 3);
 }
 
 function enregistrerElement(evenement) {
