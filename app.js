@@ -113,14 +113,73 @@ const NATURES = {
       return el.auteur ? `${el.titre} — ${el.auteur}` : el.titre;
     },
   },
+
+  /* ----- Films et séries ----- */
+  films: {
+    libelle: "Films et séries",
+    singulier: "titre",
+    pluriel: "titres",
+    feminin: false,
+    champs: [
+      { cle: "titre",  libelle: "Titre", type: "texte", obligatoire: true, placeholder: "ex. Les Enfants du paradis" },
+      { cle: "genre",  libelle: "Type", type: "choix", defaut: "film",
+        options: { "film": "Film", "serie": "Série", "documentaire": "Documentaire" } },
+      { cle: "realisateur", libelle: "Réalisation / création", type: "texte", placeholder: "ex. Marcel Carné" },
+      { cle: "annee",  libelle: "Année", type: "texte", placeholder: "ex. 1945" },
+      { cle: "statut", libelle: "Statut", type: "choix", defaut: "a-voir",
+        options: { "a-voir": "À voir", "en-cours": "En cours", "vu": "Vu" } },
+      { cle: "note",   libelle: "Ma note", type: "choix", defaut: "",
+        options: { "": "—", "1": "★", "2": "★★", "3": "★★★", "4": "★★★★", "5": "★★★★★" } },
+      { cle: "ou",     libelle: "Où le voir", type: "texte", placeholder: "Cinéma, Netflix, Arte, DVD…" },
+      { cle: "conseille", libelle: "Conseillé par", type: "texte", placeholder: "Un ami, une critique…" },
+      { cle: "tags",   libelle: "Genres", type: "tags", placeholder: "comédie, polar, science-fiction…",
+        aide: "Séparez les genres par des virgules." },
+      { cle: "notes",  libelle: "Notes / avis", type: "texte-long", lignes: 3 },
+    ],
+    champsRecherche: ["titre", "realisateur", "annee", "ou", "conseille", "notes", "tags"],
+    tris: {
+      recent: { libelle: "Ajoutés récemment", comparer: (a, b) => b.creeLe - a.creeLe },
+      statut: { libelle: "Statut",            comparer: (a, b) => ordreStatut(a) - ordreStatut(b) || b.creeLe - a.creeLe },
+      titre:  { libelle: "Titre (A → Z)",     comparer: (a, b) => comparerTexte(a.titre, b.titre) },
+      annee:  { libelle: "Année",             comparer: (a, b) => comparerTexte(a.annee, b.annee) || comparerTexte(a.titre, b.titre) },
+      note:   { libelle: "Mieux notés",       comparer: (a, b) => (Number(b.note) || 0) - (Number(a.note) || 0) },
+    },
+    afficher(el) {
+      const champ = cle => this.champs.find(c => c.cle === cle).options;
+      const statut = el.statut || "a-voir";
+      const genre = el.genre || "film";
+      const note = Number(el.note) || 0;
+      const sousTitre = [el.realisateur, el.annee].filter(Boolean).map(echapper).join(" · ");
+      return `
+        <p class="livre-titre">${echapper(el.titre)}</p>
+        ${sousTitre ? `<p class="livre-auteur">${sousTitre}</p>` : ""}
+        <div class="livre-infos">
+          <span class="type-film">${champ("genre")[genre]}</span>
+          <button class="statut statut-${statut}" data-action="cycle" data-champ="statut"
+            title="Changer le statut">${champ("statut")[statut]}</button>
+          ${note ? `<span class="etoiles" aria-label="${note} sur 5">${"★".repeat(note)}${"☆".repeat(5 - note)}</span>` : ""}
+          ${el.ou ? `<span>📺 ${echapper(el.ou)}</span>` : ""}
+          ${el.conseille ? `<span>Conseillé par ${echapper(el.conseille)}</span>` : ""}
+        </div>
+        ${afficherTags(el.tags)}
+        ${el.notes ? `<p class="notes">${echapper(el.notes)}</p>` : ""}`;
+    },
+    enTexte(el) {
+      let t = el.titre;
+      const details = [el.realisateur, el.annee].filter(Boolean).join(", ");
+      if (details) t += ` (${details})`;
+      return t;
+    },
+  },
 };
 
+// Ordre du tri « Statut » (livres et films) : en cours d'abord, puis à faire, puis terminé
 function ordreStatut(el) {
-  return { "en-cours": 0, "a-lire": 1, "lu": 2 }[el.statut || "a-lire"] ?? 1;
+  return { "en-cours": 0, "a-lire": 1, "a-voir": 1, "lu": 2, "vu": 2 }[el.statut] ?? 1;
 }
 
 // Natures prévues mais pas encore disponibles (affichées grisées)
-const NATURES_A_VENIR = ["Courses", "Films à voir", "Restaurants", "Actions à faire", "Idées de voyage"];
+const NATURES_A_VENIR = ["Courses", "Restaurants", "Actions à faire", "Idées de voyage"];
 
 // Accord masculin / féminin des messages : accord(nature, "Nouvelle", "Nouveau")
 function accord(nature, feminin, masculin) {

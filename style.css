@@ -243,9 +243,14 @@ h1 { margin: 2px 0 0; font-family: var(--police-citation); font-size: 32px; font
   border: none; cursor: pointer;
   border-radius: 999px; padding: 3px 11px; font-size: 13px; font-weight: 600;
 }
-.statut-a-lire   { background: var(--accent-doux); color: var(--accent); }
+.statut-a-lire, .statut-a-voir { background: var(--accent-doux); color: var(--accent); }
 .statut-en-cours { background: var(--bleu-doux); color: var(--bleu); }
-.statut-lu       { background: var(--vert-doux); color: var(--vert); }
+.statut-lu, .statut-vu { background: var(--vert-doux); color: var(--vert); }
+/* Films et séries : étiquette Film / Série / Documentaire */
+.type-film {
+  border: 1px solid var(--bordure, currentColor); border-radius: 999px;
+  padding: 2px 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .5px;
+}
 .etoiles { color: var(--favori); letter-spacing: 1px; font-size: 15px; }
 
 /* Vue en tuiles : colonnes de hauteurs libres (style « mur ») */
