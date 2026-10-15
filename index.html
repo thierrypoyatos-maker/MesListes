@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>MesListes</title>
+  <!-- Pour l'installation sur téléphone (application « PWA ») -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#9b3a2b">
+  <link rel="icon" href="icones/icone-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icones/icone-192.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Barre du haut : choix de la liste et menu -->
+  <header class="barre">
+    <div class="marque">MesListes</div>
+    <select id="choixListe" aria-label="Liste affichée"></select>
+    <div class="espace"></div>
+    <button id="etatSynchro" class="etat-synchro" hidden></button>
+    <div class="menu-conteneur">
+      <button id="btnMenu" class="btn-icone btn-menu" aria-label="Menu" aria-expanded="false" aria-controls="menu">⋮</button>
+      <div id="menu" class="menu" hidden>
+        <button id="btnNouvelleListe">+ Nouvelle liste</button>
+        <button id="btnExporter">Exporter une sauvegarde</button>
+        <label>Importer une sauvegarde
+          <input type="file" id="fichierImport" accept=".json,application/json" hidden>
+        </label>
+        <button id="btnInstaller" hidden>Installer l'application</button>
+        <button id="btnCompte" class="menu-compte" hidden></button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- En-tête de la liste active -->
+    <section class="entete-liste">
+      <div>
+        <p class="nature" id="natureListe"></p>
+        <h1>
+          <span id="titreListe"></span>
+          <button id="btnGererListe" class="btn-icone" title="Renommer ou supprimer la liste" aria-label="Renommer ou supprimer la liste">✎</button>
+        </h1>
+        <p class="compteur" id="compteur"></p>
+      </div>
+      <div class="actions-entete">
+        <button id="btnHasard" class="btn">Au hasard</button>
+        <button id="btnAjouter" class="btn btn-principal">+ Ajouter</button>
+      </div>
+    </section>
+
+    <!-- Outils : recherche, tri, favoris, mode d'affichage -->
+    <section class="outils">
+      <input type="search" id="recherche" placeholder="Rechercher…" aria-label="Rechercher">
+      <div class="outils-ligne">
+        <select id="tri" aria-label="Trier"></select>
+        <button id="btnFavoris" class="btn bascule" aria-pressed="false" title="Favoris seulement">★<span class="libelle-long"> Favoris</span></button>
+        <div class="bascule-vue" role="group" aria-label="Affichage">
+          <button data-vue="liste" title="Affichage en liste">☰<span class="libelle-long"> Liste</span></button>
+          <button data-vue="tuiles" title="Affichage en tuiles">▦<span class="libelle-long"> Tuiles</span></button>
+        </div>
+      </div>
+    </section>
+
+    <div id="filtresTags" class="filtres-tags"></div>
+
+    <!-- Les éléments de la liste sont affichés ici -->
+    <div id="contenu"></div>
+  </main>
+
+  <!-- Bouton « + » flottant (sur téléphone) -->
+  <button id="btnAjouterFlottant" class="fab" aria-label="Ajouter">+</button>
+
+  <!-- Fenêtre : ajouter / modifier un élément -->
+  <dialog id="dlgElement">
+    <form id="formElement">
+      <h2 id="titreFormElement"></h2>
+      <div id="champsElement" class="champs"></div>
+      <div class="pied-dialogue">
+        <button type="button" class="btn" data-fermer>Annuler</button>
+        <button type="submit" class="btn btn-principal">Enregistrer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Fenêtre : créer / gérer une liste -->
+  <dialog id="dlgListe">
+    <form id="formListe">
+      <h2 id="titreFormListe"></h2>
+      <div class="champs">
+        <label for="nomListe">Nom de la liste *</label>
+        <input type="text" id="nomListe" required>
+        <div id="blocNature" class="champs">
+          <label for="natureNouvelleListe">Nature</label>
+          <select id="natureNouvelleListe"></select>
+        </div>
+      </div>
+      <div class="pied-dialogue">
+        <button type="button" class="btn btn-danger" id="btnSupprimerListe">Supprimer</button>
+        <div class="espace"></div>
+        <button type="button" class="btn" data-fermer>Annuler</button>
+        <button type="submit" class="btn btn-principal">Enregistrer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Fenêtre : élément tiré au hasard -->
+  <dialog id="dlgHasard" class="dlg-hasard">
+    <div id="contenuHasard"></div>
+    <div class="pied-dialogue">
+      <button type="button" class="btn" data-fermer>Fermer</button>
+      <button type="button" class="btn btn-principal" id="btnAutreHasard">Un autre</button>
+    </div>
+  </dialog>
+
+  <div id="notification" class="notification" role="status" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+  <!-- Synchronisation entre appareils (ne fonctionne qu'une fois l'appli en ligne) -->
+  <script type="module" src="synchro.js"></script>
+</body>
+</html>
