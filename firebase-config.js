@@ -1,16 +1,14 @@
 /* =========================================================
-   Paramètres de votre projet Firebase.
-   Tant que ces valeurs sont vides, la synchronisation est
-   désactivée et l'application fonctionne seule sur l'appareil.
+   Paramètres du projet Firebase « meslistes-ace57 ».
    Ces valeurs ne sont pas secrètes : la protection des données
-   est assurée par les « règles » Firestore (voir la notice).
+   est assurée par les « règles » Firestore (voir LISEZMOI.md).
    ========================================================= */
 
 export const firebaseConfig = {
-  apiKey: "",
-  authDomain: "",
-  projectId: "",
-  storageBucket: "",
-  messagingSenderId: "",
-  appId: "",
+  apiKey: "AIzaSyDjodlCtwTLsQlOm-ACKv6H8gLyXFuPzIc",
+  authDomain: "meslistes-ace57.firebaseapp.com",
+  projectId: "meslistes-ace57",
+  storageBucket: "meslistes-ace57.firebasestorage.app",
+  messagingSenderId: "114416701120",
+  appId: "1:114416701120:web:2b96fa718fb5d53036e725",
 };

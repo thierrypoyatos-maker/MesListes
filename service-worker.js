@@ -7,7 +7,7 @@
    la nouvelle version.
    ========================================================= */
 
-const VERSION = "meslistes-v3";
+const VERSION = "meslistes-v4";
 
 const FICHIERS = [
   "./",
