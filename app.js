@@ -33,7 +33,8 @@ const NATURES = {
     champs: [
       { cle: "texte",  libelle: "Citation", type: "texte-long", lignes: 4, obligatoire: true,
         placeholder: "Le texte de la citation…" },
-      { cle: "auteur", libelle: "Auteur", type: "texte", placeholder: "ex. Montaigne" },
+      { cle: "auteur", libelle: "Auteur", type: "texte", placeholder: "ex. Montaigne",
+        chercherAuteurDe: "texte" },   // bouton « Trouver l'auteur » à partir du champ texte
       { cle: "source", libelle: "Source", type: "texte", placeholder: "Livre, film, discours, chanson…" },
       { cle: "annee",  libelle: "Année ou époque", type: "texte", placeholder: "ex. 1580" },
       { cle: "tags",   libelle: "Thèmes", type: "tags", placeholder: "amitié, sagesse…",
@@ -527,13 +528,94 @@ function ouvrirFormulaireElement(element = null) {
         ${c.type === "tags" ? 'autocapitalize="none"' : 'autocapitalize="sentences"'}>`;
     }
     return `<label for="${id}">${c.libelle}${c.obligatoire ? " *" : ""}</label>${saisie}
-            ${c.aide ? `<p class="aide">${c.aide}</p>` : ""}`;
+            ${c.aide ? `<p class="aide">${c.aide}</p>` : ""}
+            ${c.chercherAuteurDe ? `<div class="recherche-auteur">
+              <button type="button" class="btn btn-petit" data-action="chercher-auteur">🔎 Trouver l'auteur</button>
+              <div id="pistesAuteur" class="pistes" aria-live="polite"></div></div>` : ""}`;
   }).join("");
+
+  // Citation saisie sans auteur : on cherche l'auteur automatiquement en quittant le champ
+  const champSource = nature.champs.find(c => c.chercherAuteurDe);
+  if (champSource) {
+    $(`#champ-${champSource.chercherAuteurDe}`).addEventListener("change", () => {
+      if (!$(`#champ-${champSource.cle}`).value.trim()) chercherAuteur(true);
+    });
+  }
 
   ouvrirDialogue($("#dlgElement"));
   // Sur ordinateur, on place le curseur dans le premier champ.
   // Sur téléphone on s'abstient : le clavier cacherait la moitié de la fenêtre.
   if (!matchMedia("(pointer: coarse)").matches) $("#champsElement [name]")?.focus();
+}
+
+/* ---------- Recherche de l'auteur d'une citation sur internet ----------
+   1. On interroge Wikiquote (le recueil de citations de Wikipédia) avec un
+      extrait de la citation : les pages trouvées portent en général le nom
+      de l'auteur (ou de l'œuvre). On les propose ; un toucher remplit le champ.
+   2. Un lien ouvre aussi une recherche Google, pour vérifier ou si Wikiquote
+      ne trouve rien. */
+
+let numeroRecherche = 0;   // pour ignorer une réponse arrivée trop tard
+
+async function chercherAuteur(automatique) {
+  const zone = $("#pistesAuteur");
+  if (!zone) return;
+  const citation = $("#champ-texte").value.replace(/\s+/g, " ").trim();
+  if (!citation) {
+    zone.innerHTML = `<p class="aide">Saisissez d'abord la citation.</p>`;
+    return;
+  }
+
+  const lienWeb = `<a class="lien-resto" target="_blank" rel="noopener"
+    href="https://www.google.com/search?q=${encodeURIComponent(`"${extraitCitation(citation, 16)}" citation auteur`)}">Chercher sur le web ↗</a>`;
+  const numero = ++numeroRecherche;
+  zone.innerHTML = `<p class="aide">Recherche de l'auteur…</p>`;
+
+  let pistes = [];
+  try {
+    // D'abord la phrase exacte (début de la citation), puis les mots en vrac
+    for (const langue of ["fr", "en"]) {
+      pistes = await chercherSurWikiquote(langue, `"${extraitCitation(citation, 10)}"`);
+      if (!pistes.length) pistes = await chercherSurWikiquote(langue, extraitCitation(citation, 8));
+      if (pistes.length) break;
+    }
+  } catch {
+    // Hors connexion ou Wikiquote inaccessible : seul le lien web reste proposé
+  }
+  if (numero !== numeroRecherche || !document.body.contains(zone)) return;
+
+  if (pistes.length) {
+    zone.innerHTML = `<p class="aide">Auteur possible (touchez pour l'utiliser) :</p>
+      <div class="pistes-liste">${pistes.map(p => `
+        <span class="piste">
+          <button type="button" class="tag" data-action="piste-auteur" data-valeur="${echapper(p.titre)}">${echapper(p.titre)}</button>
+          <a href="${p.url}" target="_blank" rel="noopener" title="Voir la page Wikiquote">↗</a>
+        </span>`).join("")}</div>
+      <p class="aide">À vérifier : une piste peut être le titre d'une œuvre plutôt que l'auteur. ${lienWeb}</p>`;
+  } else if (automatique) {
+    zone.innerHTML = `<p class="aide">Auteur introuvable sur Wikiquote. ${lienWeb}</p>`;
+  } else {
+    zone.innerHTML = `<p class="aide">Rien trouvé sur Wikiquote. ${lienWeb}</p>`;
+  }
+}
+
+// Les premiers mots de la citation, sans guillemets ni ponctuation finale
+function extraitCitation(citation, nbMots) {
+  return citation.replace(/[«»"“”„]/g, " ").replace(/\s+/g, " ").trim()
+    .split(" ").slice(0, nbMots).join(" ").replace(/[\s.,;:!?…]+$/, "");
+}
+
+// Interroge Wikiquote ; renvoie au plus 3 pages : [{ titre, url }]
+async function chercherSurWikiquote(langue, requete) {
+  const adresse = `https://${langue}.wikiquote.org/w/api.php?action=query&list=search&format=json&origin=*` +
+    `&srnamespace=0&srlimit=3&srprop=&srsearch=${encodeURIComponent(requete)}`;
+  const reponse = await fetch(adresse);
+  if (!reponse.ok) return [];
+  const resultat = await reponse.json();
+  return (resultat.query?.search || []).map(r => ({
+    titre: r.title,
+    url: `https://${langue}.wikiquote.org/wiki/${encodeURIComponent(r.title.replace(/ /g, "_"))}`,
+  }));
 }
 
 function enregistrerElement(evenement) {
@@ -609,6 +691,13 @@ function actionCarte(action, carte, bouton) {
       ecran.tag = ecran.tag === bouton.dataset.tag ? null : bouton.dataset.tag;
       if ($("#dlgHasard").open) $("#dlgHasard").close();
       afficherTout();
+      break;
+    case "chercher-auteur":
+      chercherAuteur(false);
+      break;
+    case "piste-auteur":
+      $("#champ-auteur").value = bouton.dataset.valeur;
+      $("#pistesAuteur").innerHTML = `<p class="aide">Auteur renseigné : ${echapper(bouton.dataset.valeur)} ✓</p>`;
       break;
     case "ajouter":
       ouvrirFormulaireElement();

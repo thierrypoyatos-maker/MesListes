@@ -385,3 +385,12 @@ dialog h2 { margin: 0 0 12px; font-family: var(--police-citation); font-weight: 
   .fab:active { transform: scale(.95); }
   .notification { bottom: calc(94px + env(safe-area-inset-bottom)); }
 }
+
+/* Recherche de l'auteur d'une citation (formulaire) */
+.recherche-auteur { margin-top: 6px; }
+.btn-petit { padding: 5px 12px; font-size: 14px; }
+.pistes .aide { margin: 6px 0 0; }
+.pistes-liste { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.piste { display: inline-flex; align-items: center; gap: 3px; }
+.piste a { color: var(--doux); text-decoration: none; font-size: 13px; }
+.piste .tag.actif, .piste .tag:hover { border-color: var(--accent); color: var(--accent); }
