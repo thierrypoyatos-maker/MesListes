@@ -171,15 +171,98 @@ const NATURES = {
       return t;
     },
   },
+
+  /* ----- Restaurants ----- */
+  restaurants: {
+    libelle: "Restaurants",
+    singulier: "restaurant",
+    pluriel: "restaurants",
+    feminin: false,
+    champs: [
+      { cle: "nom",     libelle: "Nom", type: "texte", obligatoire: true, placeholder: "ex. Le Petit Bouillon" },
+      { cle: "cuisine", libelle: "Cuisine", type: "texte", placeholder: "ex. française, japonaise, pizzeria…" },
+      { cle: "ville",   libelle: "Ville / quartier", type: "texte", placeholder: "ex. Paris 11e" },
+      { cle: "adresse", libelle: "Adresse", type: "texte", placeholder: "ex. 12 rue de la Roquette",
+        aide: "L'adresse devient un lien vers la carte." },
+      { cle: "prix",    libelle: "Prix", type: "choix", defaut: "",
+        options: { "": "—", "1": "€ (bon marché)", "2": "€€ (moyen)", "3": "€€€ (cher)", "4": "€€€€ (très cher)" } },
+      { cle: "statut",  libelle: "Statut", type: "choix", defaut: "a-essayer",
+        options: { "a-essayer": "À essayer", "teste": "Testé", "a-eviter": "À éviter" } },
+      { cle: "note",    libelle: "Ma note", type: "choix", defaut: "",
+        options: { "": "—", "1": "★", "2": "★★", "3": "★★★", "4": "★★★★", "5": "★★★★★" } },
+      { cle: "contact", libelle: "Téléphone ou site", type: "texte", placeholder: "ex. 01 23 45 67 89 ou https://…" },
+      { cle: "conseille", libelle: "Conseillé par", type: "texte", placeholder: "Un ami, un guide, un article…" },
+      { cle: "tags",    libelle: "Occasions / ambiance", type: "tags", placeholder: "terrasse, en famille, romantique…",
+        aide: "Séparez les mots par des virgules." },
+      { cle: "notes",   libelle: "Notes / avis", type: "texte-long", lignes: 3,
+        placeholder: "Plats à goûter, réserver à l'avance, fermé le lundi…" },
+    ],
+    champsRecherche: ["nom", "cuisine", "ville", "adresse", "conseille", "notes", "tags"],
+    tris: {
+      recent: { libelle: "Ajoutés récemment", comparer: (a, b) => b.creeLe - a.creeLe },
+      statut: { libelle: "Statut",            comparer: (a, b) => ordreStatut(a) - ordreStatut(b) || b.creeLe - a.creeLe },
+      nom:    { libelle: "Nom (A → Z)",       comparer: (a, b) => comparerTexte(a.nom, b.nom) },
+      ville:  { libelle: "Ville (A → Z)",     comparer: (a, b) => comparerTexte(a.ville, b.ville) || comparerTexte(a.nom, b.nom) },
+      note:   { libelle: "Mieux notés",       comparer: (a, b) => (Number(b.note) || 0) - (Number(a.note) || 0) },
+      prix:   { libelle: "Moins chers",       comparer: (a, b) => (Number(a.prix) || 9) - (Number(b.prix) || 9) },
+    },
+    afficher(el) {
+      const statuts = this.champs.find(c => c.cle === "statut").options;
+      const statut = el.statut || "a-essayer";
+      const note = Number(el.note) || 0;
+      const prix = Number(el.prix) || 0;
+      const sousTitre = [el.cuisine, el.ville].filter(Boolean).map(echapper).join(" · ");
+      // L'adresse (complétée par la ville) ouvre la carte Google Maps
+      const lieu = [el.adresse, el.ville].filter(Boolean).join(", ");
+      const carte = el.adresse
+        ? `<a class="lien-resto" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(el.nom + ", " + lieu)}"
+             target="_blank" rel="noopener">📍 ${echapper(el.adresse)}</a>` : "";
+      return `
+        <p class="livre-titre">${echapper(el.nom)}</p>
+        ${sousTitre ? `<p class="livre-auteur">${sousTitre}</p>` : ""}
+        <div class="livre-infos">
+          <button class="statut statut-${statut}" data-action="cycle" data-champ="statut"
+            title="Changer le statut">${statuts[statut]}</button>
+          ${prix ? `<span class="prix" aria-label="Prix ${prix} sur 4">${"€".repeat(prix)}</span>` : ""}
+          ${note ? `<span class="etoiles" aria-label="${note} sur 5">${"★".repeat(note)}${"☆".repeat(5 - note)}</span>` : ""}
+          ${el.conseille ? `<span>Conseillé par ${echapper(el.conseille)}</span>` : ""}
+        </div>
+        ${carte || el.contact ? `<div class="livre-infos">${carte}${lienContact(el.contact)}</div>` : ""}
+        ${afficherTags(el.tags)}
+        ${el.notes ? `<p class="notes">${echapper(el.notes)}</p>` : ""}`;
+    },
+    enTexte(el) {
+      let t = el.nom;
+      const details = [el.cuisine, el.adresse, el.ville].filter(Boolean).join(", ");
+      if (details) t += ` (${details})`;
+      if (el.contact) t += ` — ${el.contact}`;
+      return t;
+    },
+  },
 };
 
-// Ordre du tri « Statut » (livres et films) : en cours d'abord, puis à faire, puis terminé
+// Téléphone ou site web : devient un lien cliquable (appel ou ouverture du site)
+function lienContact(contact) {
+  if (!contact) return "";
+  const c = contact.trim();
+  if (/^https?:\/\//i.test(c) || /^www\./i.test(c)) {
+    const url = /^www\./i.test(c) ? "https://" + c : c;
+    return `<a class="lien-resto" href="${echapper(url)}" target="_blank" rel="noopener">🌐 Site</a>`;
+  }
+  if (/^[+\d][\d\s.\-()]{5,}$/.test(c)) {
+    return `<a class="lien-resto" href="tel:${c.replace(/[^\d+]/g, "")}">📞 ${echapper(c)}</a>`;
+  }
+  return `<span>${echapper(c)}</span>`;
+}
+
+// Ordre du tri « Statut » : en cours d'abord, puis à faire, puis terminé (puis à éviter)
 function ordreStatut(el) {
-  return { "en-cours": 0, "a-lire": 1, "a-voir": 1, "lu": 2, "vu": 2 }[el.statut] ?? 1;
+  return { "en-cours": 0, "a-lire": 1, "a-voir": 1, "a-essayer": 1,
+           "lu": 2, "vu": 2, "teste": 2, "a-eviter": 3 }[el.statut] ?? 1;
 }
 
 // Natures prévues mais pas encore disponibles (affichées grisées)
-const NATURES_A_VENIR = ["Courses", "Restaurants", "Actions à faire", "Idées de voyage"];
+const NATURES_A_VENIR = ["Courses", "Actions à faire", "Idées de voyage"];
 
 // Accord masculin / féminin des messages : accord(nature, "Nouvelle", "Nouveau")
 function accord(nature, feminin, masculin) {

@@ -245,7 +245,12 @@ h1 { margin: 2px 0 0; font-family: var(--police-citation); font-size: 32px; font
 }
 .statut-a-lire, .statut-a-voir { background: var(--accent-doux); color: var(--accent); }
 .statut-en-cours { background: var(--bleu-doux); color: var(--bleu); }
-.statut-lu, .statut-vu { background: var(--vert-doux); color: var(--vert); }
+.statut-lu, .statut-vu, .statut-teste { background: var(--vert-doux); color: var(--vert); }
+.statut-a-eviter { background: var(--bordure, #ddd); color: var(--doux); text-decoration: line-through; }
+/* Restaurants : prix et liens (carte, téléphone, site) */
+.prix { font-weight: 700; color: var(--vert); letter-spacing: 1px; }
+.lien-resto { color: var(--accent); text-decoration: none; }
+.lien-resto:hover { text-decoration: underline; }
 /* Films et séries : étiquette Film / Série / Documentaire */
 .type-film {
   border: 1px solid var(--bordure, currentColor); border-radius: 999px;
