@@ -388,6 +388,7 @@ dialog h2 { margin: 0 0 12px; font-family: var(--police-citation); font-weight: 
 
 /* Recherche de l'auteur d'une citation (formulaire) */
 .recherche-auteur { margin-top: 6px; }
+#pistesAuteur { min-height: 1.6em; }   /* place réservée : pas de saut de mise en page */
 .btn-petit { padding: 5px 12px; font-size: 14px; }
 .pistes .aide { margin: 6px 0 0; }
 .pistes-liste { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }

@@ -44,8 +44,9 @@ async function demarrer() {
 
   let reference = null;        // le document de l'utilisateur connecté
   let arreterEcoute = null;    // pour arrêter l'écoute à la déconnexion
-  let decisionPrise = false;   // vrai une fois la première synchronisation réglée
+  let pret = false;            // vrai une fois la version du compte reçue et fusionnée
   let minuteurEnvoi = null;
+  let contenuEnAttente = null; // modification pas encore envoyée
 
   /* --- Connexion / déconnexion --- */
   appli.connecter = async () => {
@@ -65,29 +66,44 @@ async function demarrer() {
   appli.deconnecter = () => A.signOut(auth);
   A.getRedirectResult(auth).catch(e => console.warn(e));
 
-  /* --- Envoi des modifications (regroupées sur une demi-seconde) --- */
-  function envoyer(donnees) {
-    if (!reference || !decisionPrise) return;
+  // Ce qui est envoyé au compte : les listes et les suppressions
+  // (la vue et la liste affichée restent propres à chaque appareil)
+  const contenuDe = d => JSON.stringify({ version: d.version || 1, listes: d.listes, supprimes: d.supprimes || {} });
+
+  /* --- Envoi des modifications (regroupées sur 0,3 seconde) ---
+     Tant que la version du compte n'est pas arrivée (démarrage, réseau
+     faible), on n'envoie rien : la modification reste sur l'appareil et
+     sera fusionnée puis envoyée dès que le compte répond. */
+  function envoyer(donnees, immediat = false) {
+    if (!reference || !pret) return;
     clearTimeout(minuteurEnvoi);
-    const contenu = JSON.stringify(donnees);
-    minuteurEnvoi = setTimeout(() => {
-      F.setDoc(reference, { contenu, modifieLe: F.serverTimestamp() })
-        .catch(e => { console.error(e); appli.etatSynchro("erreur"); });
-    }, 500);
+    contenuEnAttente = contenuDe(donnees);
+    if (immediat) envoyerMaintenant();
+    else minuteurEnvoi = setTimeout(envoyerMaintenant, 300);
   }
-  appli.auChangement = envoyer;
+  function envoyerMaintenant() {
+    clearTimeout(minuteurEnvoi);
+    if (!contenuEnAttente || !reference) return;
+    const contenu = contenuEnAttente;
+    contenuEnAttente = null;
+    F.setDoc(reference, { contenu, modifieLe: F.serverTimestamp() })
+      .catch(e => { console.error(e); appli.etatSynchro("erreur"); });
+  }
+  appli.auChangement = d => envoyer(d);
+  // Application mise en arrière-plan ou fermée : on envoie tout de suite
+  document.addEventListener("visibilitychange", () => { if (document.hidden) envoyerMaintenant(); });
+  addEventListener("pagehide", envoyerMaintenant);
 
   /* --- Suivi de l'utilisateur connecté --- */
   A.onAuthStateChanged(auth, utilisateur => {
     if (arreterEcoute) arreterEcoute();
     arreterEcoute = null;
     reference = null;
-    decisionPrise = false;
+    pret = false;
 
     if (!utilisateur) { appli.etatSynchro("deconnecte"); return; }
 
     const courriel = utilisateur.email;
-    const cleAppareil = "mesListes.synchro." + utilisateur.uid;
     appli.etatSynchro("connexion", courriel);
     reference = F.doc(db, "utilisateurs", utilisateur.uid);
 
@@ -99,42 +115,31 @@ async function demarrer() {
         appli.etatSynchro(enLigne ? "envoi" : "hors-ligne", courriel);
         return;
       }
+      // Au démarrage, on attend la vraie version du serveur (pas la copie en cache)
+      if (!pret && !enLigne) { appli.etatSynchro("hors-ligne", courriel); return; }
 
-      // Première fois : on attend la réponse du serveur pour décider
-      if (!decisionPrise) {
-        if (!enLigne) { appli.etatSynchro("hors-ligne", courriel); return; }
-        decisionPrise = true;
-        const dejaSynchronise = localStorage.getItem(cleAppareil) === "1";
-        localStorage.setItem(cleAppareil, "1");
+      const premiere = !pret;
+      pret = true;
+      const locales = appli.obtenirDonnees();
 
-        if (!instantane.exists()) {
-          // Compte vide : on y envoie les listes de cet appareil
-          envoyer(appli.obtenirDonnees());
-          appli.etatSynchro("synchronise", courriel);
-          appli.notifier("Vos listes sont maintenant enregistrées sur votre compte");
-          return;
-        }
-        if (!dejaSynchronise) {
-          const utiliserCompte = confirm(
-            "Votre compte contient déjà des listes.\n\n" +
-            "OK : utiliser les listes du compte sur cet appareil (celles de cet appareil seront remplacées).\n" +
-            "Annuler : garder les listes de cet appareil et les envoyer sur le compte.");
-          if (!utiliserCompte) {
-            envoyer(appli.obtenirDonnees());
-            appli.etatSynchro("synchronise", courriel);
-            return;
-          }
-        }
+      if (!instantane.exists()) {
+        // Compte vide : on y envoie les listes de cet appareil
+        envoyer(locales, true);
+        appli.etatSynchro("synchronise", courriel);
+        if (premiere) appli.notifier("Vos listes sont maintenant enregistrées sur votre compte");
+        return;
       }
 
-      // Une version (éventuellement venue d'un autre appareil) est arrivée
-      if (instantane.exists()) {
-        const contenu = instantane.data().contenu;
-        if (contenu && contenu !== JSON.stringify(appli.obtenirDonnees())) {
-          try { appli.remplacerDonnees(JSON.parse(contenu)); }
-          catch (e) { console.error("Contenu reçu illisible", e); }
-        }
-      }
+      let distantes;
+      try { distantes = JSON.parse(instantane.data().contenu); }
+      catch (e) { console.error("Contenu reçu illisible", e); appli.etatSynchro("erreur", courriel); return; }
+
+      // Appareil neuf (seulement les citations d'exemple) : on prend le compte tel quel.
+      // Sinon : fusion, rien n'est perdu d'un côté comme de l'autre.
+      const fusion = locales.exemple ? distantes : appli.fusionner(locales, distantes);
+      if (contenuDe(fusion) !== contenuDe(locales)) appli.remplacerDonnees(fusion);
+      if (contenuDe(fusion) !== contenuDe(distantes)) envoyer(appli.obtenirDonnees(), true);
+
       appli.etatSynchro(enLigne ? "synchronise" : "hors-ligne", courriel);
     }, e => {
       console.error(e);

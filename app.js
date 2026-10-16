@@ -305,8 +305,10 @@ function donneesInitiales() {
   const id = nouvelId();
   return {
     version: 1,
+    exemple: true,     // retiré dès la première modification (voir sauvegarder)
     vue: "tuiles",
     listeActive: id,
+    supprimes: {},
     listes: [{
       id,
       nom: "Mes citations",
@@ -338,10 +340,54 @@ function enregistrerLocalement() {
   }
 }
 
-// Enregistre sur l'appareil, puis prévient la synchronisation (si active)
-function sauvegarder() {
+// Enregistre sur l'appareil, puis prévient la synchronisation (si active).
+// contenuModifie = false pour les simples préférences de cet appareil
+// (liste affichée, vue liste/tuiles) : elles ne sont pas envoyées.
+function sauvegarder(contenuModifie = true) {
+  if (contenuModifie) delete donnees.exemple;
   enregistrerLocalement();
-  MesListes.auChangement?.(donnees);
+  if (contenuModifie) MesListes.auChangement?.(donnees);
+}
+
+// Note la suppression d'une liste ou d'un élément, pour que les autres
+// appareils la suppriment aussi (au lieu de la faire réapparaître).
+function noterSuppression(id) {
+  donnees.supprimes ??= {};
+  donnees.supprimes[id] = Date.now();
+}
+
+/* Fusion de deux versions des données (cet appareil + le compte en ligne).
+   Rien n'est perdu : on garde toutes les listes et tous les éléments des
+   deux côtés ; pour un élément présent des deux côtés, on garde la version
+   modifiée le plus récemment ; un élément supprimé (et pas modifié depuis)
+   disparaît des deux côtés. La vue et la liste affichée restent celles
+   de cet appareil. */
+function fusionner(local, distant) {
+  const supprimes = { ...(distant.supprimes || {}) };
+  Object.entries(local.supprimes || {}).forEach(([id, t]) => supprimes[id] = Math.max(t, supprimes[id] || 0));
+  // On oublie les traces de suppression de plus de 6 mois
+  const limite = Date.now() - 183 * 24 * 3600 * 1000;
+  Object.keys(supprimes).forEach(id => { if (supprimes[id] < limite) delete supprimes[id]; });
+
+  const vivant = obj => !(supprimes[obj.id] >= (obj.modifieLe || 0));
+  const plusRecent = (a, b) => !a ? b : !b ? a : ((b.modifieLe || 0) > (a.modifieLe || 0) ? b : a);
+
+  const listesDistantes = new Map((distant.listes || []).map(l => [l.id, l]));
+  const ids = [...new Set([...(local.listes || []).map(l => l.id), ...listesDistantes.keys()])];
+  const listeLocale = id => (local.listes || []).find(l => l.id === id);
+
+  const listes = ids.map(id => {
+    const a = listeLocale(id), b = listesDistantes.get(id);
+    const base = plusRecent(a, b);
+    const elementsB = new Map(((b && b.elements) || []).map(e => [e.id, e]));
+    const idsElements = [...new Set([...((a && a.elements) || []).map(e => e.id), ...elementsB.keys()])];
+    const elements = idsElements
+      .map(eid => plusRecent((a && a.elements || []).find(e => e.id === eid), elementsB.get(eid)))
+      .filter(vivant);
+    return { ...base, elements };
+  }).filter(vivant);
+
+  return { ...distant, ...local, listes: listes.length ? listes : local.listes, supprimes };
 }
 
 function listeActive() {
@@ -537,8 +583,12 @@ function ouvrirFormulaireElement(element = null) {
   // Citation saisie sans auteur : on cherche l'auteur automatiquement en quittant le champ
   const champSource = nature.champs.find(c => c.chercherAuteurDe);
   if (champSource) {
+    // Petit délai : si l'on quitte le champ en touchant « Enregistrer », l'enregistrement
+    // passe d'abord (sinon le texte ajouté décalerait le bouton sous le doigt).
     $(`#champ-${champSource.chercherAuteurDe}`).addEventListener("change", () => {
-      if (!$(`#champ-${champSource.cle}`).value.trim()) chercherAuteur(true);
+      setTimeout(() => {
+        if ($("#dlgElement").open && !$(`#champ-${champSource.cle}`).value.trim()) chercherAuteur(true);
+      }, 400);
     });
   }
 
@@ -665,6 +715,7 @@ function actionCarte(action, carte, bouton) {
   switch (action) {
     case "favori":
       element.favori = !element.favori;
+      element.modifieLe = Date.now();
       sauvegarder();
       afficherTout();
       break;
@@ -690,6 +741,7 @@ function actionCarte(action, carte, bouton) {
     case "supprimer":
       if (confirm(`Supprimer ${accord(nature, "cette", "ce")} ${nature.singulier} ?`)) {
         liste.elements = liste.elements.filter(el => el !== element);
+        noterSuppression(element.id);
         sauvegarder();
         afficherTout();
         notifier(accord(nature, "Supprimée", "Supprimé"));
@@ -779,12 +831,13 @@ function enregistrerListe(evenement) {
   const nom = $("#nomListe").value.trim();
   if (!nom) return;
   if (modeListe === "creer") {
-    const nouvelle = { id: nouvelId(), nom, nature: $("#natureNouvelleListe").value, elements: [] };
+    const nouvelle = { id: nouvelId(), nom, nature: $("#natureNouvelleListe").value, modifieLe: Date.now(), elements: [] };
     donnees.listes.push(nouvelle);
     donnees.listeActive = nouvelle.id;
     reinitialiserFiltres();
   } else {
     listeActive().nom = nom;
+    listeActive().modifieLe = Date.now();
   }
   sauvegarder();
   $("#dlgListe").close();
@@ -800,6 +853,7 @@ function supprimerListe() {
   const n = liste.elements.length;
   if (!confirm(`Supprimer la liste « ${liste.nom} » et ses ${n} élément${n > 1 ? "s" : ""} ? Cette action est définitive.`)) return;
   donnees.listes = donnees.listes.filter(l => l !== liste);
+  noterSuppression(liste.id);
   donnees.listeActive = donnees.listes[0].id;
   sauvegarder();
   $("#dlgListe").close();
@@ -834,7 +888,14 @@ function importer(evenement) {
       const d = JSON.parse(lecteur.result);
       if (!d || !Array.isArray(d.listes) || !d.listes.length) throw new Error("format");
       if (!confirm(`Remplacer vos listes actuelles par celles du fichier (${d.listes.length} liste${d.listes.length > 1 ? "s" : ""}) ?`)) return;
-      donnees = d;
+      // Ce qui n'est pas dans le fichier est noté « supprimé » (aussi sur les autres
+      // appareils) ; ce qui est dans le fichier devient la version la plus récente.
+      const maintenant = Date.now();
+      const gardes = new Set(d.listes.flatMap(l => [l.id, ...(l.elements || []).map(e => e.id)]));
+      const supprimes = { ...(donnees.supprimes || {}), ...(d.supprimes || {}) };
+      donnees.listes.forEach(l => [l, ...l.elements].forEach(o => { if (!gardes.has(o.id)) supprimes[o.id] = maintenant; }));
+      d.listes.forEach(l => { l.modifieLe = maintenant; (l.elements || []).forEach(e => { e.modifieLe = maintenant; delete supprimes[e.id]; }); delete supprimes[l.id]; });
+      donnees = { ...d, supprimes, vue: donnees.vue };
       if (!donnees.listes.some(l => l.id === donnees.listeActive)) donnees.listeActive = donnees.listes[0].id;
       sauvegarder();
       reinitialiserFiltres();
@@ -879,9 +940,12 @@ let etatSynchroActuel = "non-configuree";
 
 Object.assign(MesListes, {
   obtenirDonnees: () => donnees,
+  fusionner,
+  // Remplace les listes par celles reçues, en gardant les préférences de cet appareil
   remplacerDonnees(nouvelles) {
     if (!nouvelles || !Array.isArray(nouvelles.listes) || !nouvelles.listes.length) return;
-    donnees = nouvelles;
+    donnees = { ...nouvelles, vue: donnees.vue, listeActive: donnees.listeActive };
+    delete donnees.exemple;
     if (!donnees.listes.some(l => l.id === donnees.listeActive)) donnees.listeActive = donnees.listes[0].id;
     enregistrerLocalement();
     afficherTout();
@@ -948,7 +1012,7 @@ $("#btnInstaller").addEventListener("click", async () => {
 $("#choixListe").addEventListener("change", e => {
   donnees.listeActive = e.target.value;
   reinitialiserFiltres();
-  sauvegarder();
+  sauvegarder(false);
   afficherTout();
   window.scrollTo(0, 0);
 });
@@ -974,7 +1038,7 @@ $("#tri").addEventListener("change", e => { ecran.tri = e.target.value; afficher
 $("#btnFavoris").addEventListener("click", () => { ecran.favorisSeulement = !ecran.favorisSeulement; afficherTout(); });
 
 document.querySelectorAll(".bascule-vue button").forEach(b =>
-  b.addEventListener("click", () => { donnees.vue = b.dataset.vue; sauvegarder(); afficherTout(); }));
+  b.addEventListener("click", () => { donnees.vue = b.dataset.vue; sauvegarder(false); afficherTout(); }));
 
 $("#filtresTags").addEventListener("click", e => {
   const b = e.target.closest(".tag");
