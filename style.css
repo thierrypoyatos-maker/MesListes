@@ -85,7 +85,7 @@ button { touch-action: manipulation; }
 .barre select { min-width: 0; max-width: 320px; }
 .espace { flex: 1; }
 
-select, input[type="text"], input[type="search"], textarea {
+select, input[type="text"], input[type="search"], input[type="date"], textarea {
   background: var(--surface);
   border: 1px solid var(--bordure);
   border-radius: 8px;
@@ -253,9 +253,9 @@ h1 { margin: 2px 0 0; font-family: var(--police-citation); font-size: 32px; font
   border: none; cursor: pointer;
   border-radius: 999px; padding: 3px 11px; font-size: 13px; font-weight: 600;
 }
-.statut-a-lire, .statut-a-voir { background: var(--accent-doux); color: var(--accent); }
-.statut-en-cours { background: var(--bleu-doux); color: var(--bleu); }
-.statut-lu, .statut-vu, .statut-teste { background: var(--vert-doux); color: var(--vert); }
+.statut-a-lire, .statut-a-voir, .statut-a-essayer, .statut-idee { background: var(--accent-doux); color: var(--accent); }
+.statut-en-cours, .statut-prevu { background: var(--bleu-doux); color: var(--bleu); }
+.statut-lu, .statut-vu, .statut-teste, .statut-fait { background: var(--vert-doux); color: var(--vert); }
 .statut-a-eviter { background: var(--bordure, #ddd); color: var(--doux); text-decoration: line-through; }
 /* Restaurants : prix et liens (carte, téléphone, site) */
 .prix { font-weight: 700; color: var(--vert); letter-spacing: 1px; }
@@ -269,6 +269,15 @@ h1 { margin: 2px 0 0; font-family: var(--police-citation); font-size: 32px; font
 .etoiles { color: var(--favori); letter-spacing: 1px; font-size: 15px; }
 
 /* Vue en tuiles : colonnes de hauteurs libres (style « mur ») */
+/* Regroupement (voyages triés « Par pays ») */
+.groupe + .groupe { margin-top: 22px; }
+.groupe-titre {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  margin: 0 0 10px; padding-bottom: 6px;
+  font-size: 18px; border-bottom: 1px solid var(--bordure);
+}
+.groupe-resume { font-size: 13px; font-weight: 400; color: var(--doux); }
+
 .vue-tuiles { columns: 300px; column-gap: 18px; }
 .vue-tuiles .carte { break-inside: avoid; margin-bottom: 18px; }
 

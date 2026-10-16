@@ -20,6 +20,7 @@
      - "texte-long"  : plusieurs lignes
      - "tags"        : mots séparés par des virgules
      - "choix"       : liste déroulante (voir "options")
+     - "date"        : calendrier (valeur enregistrée « AAAA-MM-JJ »)
    Pour ajouter une nature, il suffit d'ajouter une entrée ici. */
 
 const NATURES = {
@@ -240,7 +241,106 @@ const NATURES = {
       return t;
     },
   },
+
+  /* ----- Voyages (v11) ----- */
+  voyages: {
+    libelle: "Voyages",
+    singulier: "voyage",
+    pluriel: "voyages",
+    feminin: false,
+    champs: [
+      { cle: "pays",     libelle: "Pays", type: "texte", obligatoire: true, placeholder: "ex. Italie, ou Portugal et Espagne" },
+      { cle: "regions",  libelle: "Régions / villes", type: "texte", placeholder: "ex. Toscane, Ombrie" },
+      { cle: "statut",   libelle: "Statut", type: "choix", defaut: "idee",
+        options: { "idee": "Idée", "prevu": "Prévu", "fait": "Fait" } },
+      { cle: "du",       libelle: "Date de départ", type: "date" },
+      { cle: "au",       libelle: "Date de retour", type: "date",
+        aide: "Dates facultatives : laissez vide pour une simple idée." },
+      { cle: "tags",     libelle: "Activités", type: "tags", placeholder: "randonnée, musées, plage, gastronomie…",
+        aide: "Séparez les activités par des virgules : elles servent aussi de filtres." },
+      { cle: "notes",    libelle: "Commentaires", type: "texte-long", lignes: 4,
+        placeholder: "Itinéraire, hébergements, budget, souvenirs…" },
+    ],
+    champsRecherche: ["pays", "regions", "notes", "tags"],
+    tris: {
+      // « grouper » : les voyages d'un même pays sont réunis sous un intertitre
+      pays:   { libelle: "Par pays",          grouper: el => el.pays,
+                comparer: (a, b) => comparerTexte(a.pays, b.pays) || comparerDates(a.du, b.du) || b.creeLe - a.creeLe },
+      dates:  { libelle: "Dates",              comparer: (a, b) => comparerDates(a.du, b.du) || comparerTexte(a.pays, b.pays) },
+      recent: { libelle: "Ajoutés récemment", comparer: (a, b) => b.creeLe - a.creeLe },
+      statut: { libelle: "Statut",            comparer: (a, b) => ordreStatut(a) - ordreStatut(b) || comparerDates(a.du, b.du) },
+    },
+    // Intertitre d'un groupe : « Italie · 3 voyages (2 faits) »
+    resumerGroupe(elements) {
+      const n = elements.length;
+      const faits = elements.filter(el => el.statut === "fait").length;
+      return `${n} voyage${n > 1 ? "s" : ""}${faits && n > 1 ? ` (${faits} fait${faits > 1 ? "s" : ""})` : ""}`;
+    },
+    afficher(el, enGroupe) {
+      const statuts = this.champs.find(c => c.cle === "statut").options;
+      const statut = el.statut || "idee";
+      // Sous l'intertitre d'un pays, la carte prend les régions pour titre
+      const titre = enGroupe ? (el.regions || "Tout le pays") : el.pays;
+      const sousTitre = enGroupe ? "" : el.regions;
+      const dates = periodeVoyage(el.du, el.au);
+      const lieu = [el.regions, el.pays].filter(Boolean).join(", ");
+      const carte = `<a class="lien-resto" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(lieu)}"
+           target="_blank" rel="noopener">📍 Carte</a>`;
+      return `
+        <p class="livre-titre">${echapper(titre)}</p>
+        ${sousTitre ? `<p class="livre-auteur">${echapper(sousTitre)}</p>` : ""}
+        <div class="livre-infos">
+          <button class="statut statut-${statut}" data-action="cycle" data-champ="statut"
+            title="Changer le statut">${statuts[statut]}</button>
+          ${dates ? `<span>📅 ${dates}</span>` : ""}
+          ${carte}
+        </div>
+        ${afficherTags(el.tags)}
+        ${el.notes ? `<p class="notes">${echapper(el.notes)}</p>` : ""}`;
+    },
+    enTexte(el) {
+      let t = el.pays;
+      if (el.regions) t += ` (${el.regions})`;
+      const dates = periodeVoyage(el.du, el.au);
+      if (dates) t += ` — ${dates}`;
+      if (el.tags?.length) t += ` — ${el.tags.join(", ")}`;
+      return t;
+    },
+  },
 };
+
+/* ---------- Dates (voyages) ----------
+   Les dates sont enregistrées au format « 2027-05-12 » (celui du
+   calendrier du navigateur), ce qui permet de les trier simplement. */
+
+// Tri chronologique ; les voyages sans date passent à la fin
+function comparerDates(a, b) {
+  if (!a && !b) return 0;
+  if (!a) return 1;
+  if (!b) return -1;
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+// « 2027-05-12 » → « 12 mai 2027 »
+function dateEnClair(iso, avecAnnee = true) {
+  const [a, m, j] = iso.split("-").map(Number);
+  const date = new Date(a, m - 1, j);
+  return date.toLocaleDateString("fr-FR",
+    avecAnnee ? { day: "numeric", month: "long", year: "numeric" } : { day: "numeric", month: "long" });
+}
+
+// Période lisible : « 12 → 26 mai 2027 (15 jours) », « à partir du 3 juin 2027 »…
+function periodeVoyage(du, au) {
+  if (!du && !au) return "";
+  if (du && !au) return `à partir du ${dateEnClair(du)}`;
+  if (!du && au) return `jusqu'au ${dateEnClair(au)}`;
+  if (au < du) [du, au] = [au, du];   // dates inversées par erreur
+  const memeAnnee = du.slice(0, 4) === au.slice(0, 4);
+  const memeMois = memeAnnee && du.slice(5, 7) === au.slice(5, 7);
+  const debut = memeMois ? String(Number(du.slice(8))) : dateEnClair(du, !memeAnnee);
+  const jours = Math.round((Date.parse(au) - Date.parse(du)) / 86400000) + 1;
+  return `${debut} → ${dateEnClair(au)} (${jours} jour${jours > 1 ? "s" : ""})`;
+}
 
 // Téléphone ou site web : devient un lien cliquable (appel ou ouverture du site)
 function lienContact(contact) {
@@ -258,12 +358,12 @@ function lienContact(contact) {
 
 // Ordre du tri « Statut » : en cours d'abord, puis à faire, puis terminé (puis à éviter)
 function ordreStatut(el) {
-  return { "en-cours": 0, "a-lire": 1, "a-voir": 1, "a-essayer": 1,
-           "lu": 2, "vu": 2, "teste": 2, "a-eviter": 3 }[el.statut] ?? 1;
+  return { "en-cours": 0, "prevu": 0, "a-lire": 1, "a-voir": 1, "a-essayer": 1, "idee": 1,
+           "lu": 2, "vu": 2, "teste": 2, "fait": 2, "a-eviter": 3 }[el.statut] ?? 1;
 }
 
 // Natures prévues mais pas encore disponibles (affichées grisées)
-const NATURES_A_VENIR = ["Courses", "Actions à faire", "Idées de voyage"];
+const NATURES_A_VENIR = ["Courses", "Actions à faire"];
 
 // Accord masculin / féminin des messages : accord(nature, "Nouvelle", "Nouveau")
 function accord(nature, feminin, masculin) {
@@ -309,7 +409,7 @@ let donnees = charger();
 const MesListes = window.MesListes = {};
 
 // État de l'écran (non enregistré) : recherche en cours, filtres…
-const ecran = { recherche: "", tag: null, favorisSeulement: false, tri: "recent" };
+const ecran = { recherche: "", tag: null, favorisSeulement: false, tri: "recent", natureTri: null };
 
 function nouvelId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -486,7 +586,9 @@ function afficherTout() {
   document.title = `${liste.nom} — MesListes`;
 
   // Tris
-  if (!nature.tris[ecran.tri]) ecran.tri = Object.keys(nature.tris)[0];
+  // Changement de nature de liste : on reprend son premier tri (ex. « Par pays » pour les voyages)
+  if (ecran.natureTri !== liste.nature || !nature.tris[ecran.tri]) ecran.tri = Object.keys(nature.tris)[0];
+  ecran.natureTri = liste.nature;
   $("#tri").innerHTML = Object.entries(nature.tris).map(([cle, t]) =>
     `<option value="${cle}" ${cle === ecran.tri ? "selected" : ""}>${t.libelle}</option>`).join("");
 
@@ -548,10 +650,12 @@ function afficherElements(liste, nature) {
     return;
   }
 
-  zone.className = donnees.vue === "liste" ? "vue-liste" : "vue-tuiles";
-  zone.innerHTML = visibles.map(el => `
+  const classeVue = donnees.vue === "liste" ? "vue-liste" : "vue-tuiles";
+  const grouper = nature.tris[ecran.tri].grouper;
+  const enGroupe = Boolean(grouper);   // dans un groupe, la carte n'a pas à répéter le pays
+  const cartes = elements => elements.map(el => `
     <article class="carte ${el.favori ? "favori" : ""}" data-id="${el.id}">
-      <div class="carte-corps">${nature.afficher(el)}</div>
+      <div class="carte-corps">${nature.afficher(el, enGroupe)}</div>
       <div class="carte-actions">
         <button data-action="favori" class="${el.favori ? "actif" : ""}" aria-label="${el.favori ? "Retirer des favoris" : "Ajouter aux favoris"}">${el.favori ? "★" : "☆"}</button>
         <button data-action="copier">Copier</button>
@@ -559,6 +663,29 @@ function afficherElements(liste, nature) {
         <button data-action="supprimer">Supprimer</button>
       </div>
     </article>`).join("");
+
+  // Tri avec regroupement (ex. voyages par pays) : un intertitre par groupe,
+  // et chaque groupe garde la présentation choisie (liste ou tuiles).
+  if (grouper) {
+    const groupes = new Map();   // garde l'ordre du tri
+    visibles.forEach(el => {
+      const cle = (grouper(el) || "").trim();
+      const cleNormale = normaliser(cle);   // « italie » et « Italie » vont ensemble
+      if (!groupes.has(cleNormale)) groupes.set(cleNormale, { titre: cle, elements: [] });
+      groupes.get(cleNormale).elements.push(el);
+    });
+    zone.className = "groupes";
+    zone.innerHTML = [...groupes.values()].map(g => `
+      <section class="groupe">
+        <h3 class="groupe-titre">${echapper(g.titre || "Sans pays")}
+          <span class="groupe-resume">${nature.resumerGroupe ? nature.resumerGroupe(g.elements) : g.elements.length}</span></h3>
+        <div class="${classeVue}">${cartes(g.elements)}</div>
+      </section>`).join("");
+    return;
+  }
+
+  zone.className = classeVue;
+  zone.innerHTML = cartes(visibles);
 }
 
 
@@ -588,6 +715,8 @@ function ouvrirFormulaireElement(element = null) {
     } else if (c.type === "choix") {
       saisie = `<select ${attributs}>${Object.entries(c.options).map(([v, l]) =>
         `<option value="${echapper(v)}" ${String(valeur) === v ? "selected" : ""}>${echapper(l)}</option>`).join("")}</select>`;
+    } else if (c.type === "date") {
+      saisie = `<input type="date" ${attributs} value="${echapper(valeur)}">`;
     } else {
       saisie = `<input type="text" ${attributs} ${indication} value="${echapper(valeur)}"
         ${c.type === "tags" ? 'autocapitalize="none"' : 'autocapitalize="sentences"'}>`;
