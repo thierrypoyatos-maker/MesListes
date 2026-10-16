@@ -273,7 +273,26 @@ function accord(nature, feminin, masculin) {
 
 /* ---------- 2. Les données ---------- */
 
-const CLE_STOCKAGE = "mesListes.donnees.v1";
+/* Chaque compte a sa propre copie des listes sur l'appareil :
+     mesListes.donnees.v1         → sans compte connecté
+     mesListes.donnees.u.<id>     → compte Google <id>
+   « utilisateurCourant » retient le dernier compte connecté, pour
+   afficher ses listes dès l'ouverture (avant même la réponse de Google). */
+const CLE_ANONYME = "mesListes.donnees.v1";
+const CLE_UTILISATEUR = "mesListes.utilisateurCourant";
+const CLE_COMPTES_CONNUS = "mesListes.comptesConnus";
+const cleDonnees = uid => uid ? "mesListes.donnees.u." + uid : CLE_ANONYME;
+
+function lireStockage(cle) {
+  try { return localStorage.getItem(cle); } catch { return null; }
+}
+function ecrireStockage(cle, valeur) {
+  try { valeur === null ? localStorage.removeItem(cle) : localStorage.setItem(cle, valeur); } catch {}
+}
+
+let utilisateurCourant = lireStockage(CLE_UTILISATEUR) || null;
+let CLE_STOCKAGE = cleDonnees(utilisateurCourant);
+let utilisateurInfos = { nom: "", courriel: "" };
 
 // Quelques citations d'exemple (textes anciens, libres de droits)
 const EXEMPLES_CITATIONS = [
@@ -941,6 +960,7 @@ let etatSynchroActuel = "non-configuree";
 Object.assign(MesListes, {
   obtenirDonnees: () => donnees,
   fusionner,
+  changerUtilisateur,
   // Remplace les listes par celles reçues, en gardant les préférences de cet appareil
   remplacerDonnees(nouvelles) {
     if (!nouvelles || !Array.isArray(nouvelles.listes) || !nouvelles.listes.length) return;
@@ -968,15 +988,75 @@ Object.assign(MesListes, {
   },
 });
 
+/* Changement de compte (connexion, déconnexion, autre compte).
+   Les listes du compte précédent restent rangées sous sa clé :
+   elles ne sont plus affichées, mais reviennent à sa reconnexion. */
+function changerUtilisateur(uid, infos = {}) {
+  uid = uid || null;
+  utilisateurInfos = { nom: infos.nom || "", courriel: infos.courriel || "" };
+  afficherUtilisateur();
+  if (uid === utilisateurCourant && lireStockage(cleDonnees(uid))) return;
+
+  if (uid && !lireStockage(cleDonnees(uid))) {
+    // Première connexion de ce compte sur cet appareil. Les listes saisies sans
+    // compte lui reviennent seulement si aucun autre compte n'a servi ici
+    // (ou si c'est lui qui les synchronisait avec l'ancienne version).
+    const connus = comptesConnus();
+    const siennes = lireStockage("mesListes.synchro." + uid) === "1" || !connus.some(c => c !== uid);
+    const anonymes = lireStockage(CLE_ANONYME);
+    if (siennes && anonymes) {
+      ecrireStockage(cleDonnees(uid), anonymes);
+      ecrireStockage(CLE_ANONYME, null);
+    }
+  }
+  if (uid && !comptesConnus().includes(uid)) {
+    ecrireStockage(CLE_COMPTES_CONNUS, JSON.stringify([...comptesConnus(), uid]));
+  }
+
+  const ancien = utilisateurCourant;
+  utilisateurCourant = uid;
+  ecrireStockage(CLE_UTILISATEUR, uid);
+  CLE_STOCKAGE = cleDonnees(uid);
+  donnees = charger();
+  reinitialiserFiltres();
+  afficherTout();
+  if (ancien && !uid) notifier("Déconnecté : vos listes restent sur votre compte");
+}
+
+// Comptes déjà utilisés sur cet appareil (y compris avec l'ancienne version)
+function comptesConnus() {
+  let liste = [];
+  try { liste = JSON.parse(lireStockage(CLE_COMPTES_CONNUS) || "[]"); } catch {}
+  try {
+    Object.keys(localStorage).forEach(k => {
+      if (k.startsWith("mesListes.synchro.")) liste.push(k.slice("mesListes.synchro.".length));
+    });
+  } catch {}
+  return [...new Set(liste)];
+}
+
+// Initiale (ou prénom sur grand écran) de la personne connectée, en haut à droite
+function afficherUtilisateur() {
+  const zone = $("#utilisateur");
+  const { nom, courriel } = utilisateurInfos;
+  const prenom = (nom || courriel).split(/[\s@]/)[0];
+  zone.hidden = !prenom;
+  zone.title = [nom, courriel].filter(Boolean).join(" — ");
+  zone.innerHTML = prenom
+    ? `<span class="avatar" aria-hidden="true">${echapper(prenom[0].toUpperCase())}</span><span class="libelle-long">${echapper(prenom)}</span>`
+    : "";
+}
+
 function clicCompte() {
   fermerMenu();
   if (etatSynchroActuel === "deconnecte") {
     MesListes.connecter?.();
-  } else if (confirm("Se déconnecter ? Les listes restent sur cet appareil mais ne seront plus synchronisées.")) {
+  } else if (confirm("Se déconnecter ?\n\nVos listes restent enregistrées sur votre compte et reviendront à votre prochaine connexion. Elles ne seront plus affichées sur cet appareil.")) {
     MesListes.deconnecter?.();
   }
 }
 $("#btnCompte").addEventListener("click", clicCompte);
+$("#utilisateur").addEventListener("click", () => notifier(`Connecté : ${$("#utilisateur").title}`));
 $("#etatSynchro").addEventListener("click", () => {
   if (etatSynchroActuel === "deconnecte") MesListes.connecter?.();
   else notifier($("#etatSynchro").title);

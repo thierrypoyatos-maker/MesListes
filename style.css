@@ -131,6 +131,16 @@ select:focus, input:focus, textarea:focus {
 .etat-synchro[data-etat="deconnecte"] { color: var(--accent); }
 .etat-synchro[data-etat="hors-ligne"], .etat-synchro[data-etat="erreur"] { color: var(--favori); }
 .etat-synchro span:first-child { font-size: 15px; }
+/* Personne connectée */
+.utilisateur {
+  border: none; background: transparent; cursor: pointer; color: var(--texte, inherit);
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 999px; font-size: 14px;
+}
+.utilisateur:hover { background: var(--fond); }
+.avatar {
+  width: 26px; height: 26px; border-radius: 50%; display: inline-grid; place-items: center;
+  background: var(--accent); color: var(--accent-texte, #fff); font-weight: 700; font-size: 13px;
+}
 
 /* ---------- Boutons ---------- */
 .btn, .btn-icone {

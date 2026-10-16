@@ -96,10 +96,15 @@ async function demarrer() {
 
   /* --- Suivi de l'utilisateur connecté --- */
   A.onAuthStateChanged(auth, utilisateur => {
+    envoyerMaintenant();          // dernière modification du compte précédent
     if (arreterEcoute) arreterEcoute();
     arreterEcoute = null;
     reference = null;
     pret = false;
+
+    // Affiche les listes de ce compte (chaque compte a les siennes sur l'appareil)
+    appli.changerUtilisateur(utilisateur ? utilisateur.uid : null,
+      utilisateur ? { nom: utilisateur.displayName, courriel: utilisateur.email } : {});
 
     if (!utilisateur) { appli.etatSynchro("deconnecte"); return; }
 
