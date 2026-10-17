@@ -362,9 +362,6 @@ function ordreStatut(el) {
            "lu": 2, "vu": 2, "teste": 2, "fait": 2, "a-eviter": 3 }[el.statut] ?? 1;
 }
 
-// Natures prévues mais pas encore disponibles (affichées grisées)
-const NATURES_A_VENIR = ["Courses", "Actions à faire"];
-
 // Accord masculin / féminin des messages : accord(nature, "Nouvelle", "Nouveau")
 function accord(nature, feminin, masculin) {
   return nature.feminin ? feminin : masculin;
@@ -968,8 +965,7 @@ function ouvrirFormulaireListe(mode) {
   $("#blocNature").hidden = mode !== "creer";
   $("#btnSupprimerListe").hidden = mode === "creer";
   $("#natureNouvelleListe").innerHTML =
-    Object.entries(NATURES).map(([cle, n]) => `<option value="${cle}">${n.libelle}</option>`).join("") +
-    NATURES_A_VENIR.map(n => `<option disabled>${n} (bientôt)</option>`).join("");
+    Object.entries(NATURES).map(([cle, n]) => `<option value="${cle}">${n.libelle}</option>`).join("");
   ouvrirDialogue($("#dlgListe"));
   if (!matchMedia("(pointer: coarse)").matches) $("#nomListe").focus();
 }

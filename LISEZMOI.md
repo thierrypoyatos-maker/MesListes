@@ -1,6 +1,6 @@
 # MesListes
 
-Application web de listes (citations, livres… et bientôt courses, films, restaurants, voyages),
+Application web de listes (citations, livres… et bientôt films, restaurants, voyages),
 utilisable sur ordinateur et installable sur Android.
 
 ## Fichiers
